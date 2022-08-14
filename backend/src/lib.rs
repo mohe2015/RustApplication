@@ -38,14 +38,20 @@ pub fn read_certs_from_file(
 pub async fn setup<F, Fut>(f: F) -> Result<(), Box<dyn Error>> 
 where
     F: FnOnce(Endpoint) -> Fut,
-    Fut: Future<Output = ()> {
+    Fut: Future<Output = Result<(), Box<dyn Error>>> {
     let addr = "[::1]:0".parse()?;
     let (cert, key) = generate_self_signed_cert()?;
     let (endpoint, mut incoming) = Endpoint::server(ServerConfig::with_single_cert(vec![cert], key)?, addr)?;
 
+    println!("{}", endpoint.local_addr()?);
+
     let (first, second) = tokio::join!(
         f(endpoint),
         handle_incoming(incoming));
+
+    first?;
+
+    second?;
 
     Ok(())
 }
