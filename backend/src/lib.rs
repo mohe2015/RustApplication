@@ -1,5 +1,55 @@
+use std::net::Ipv6Addr;
 use std::os::raw::{c_char};
 use std::ffi::{CString, CStr};
+
+use futures_util::StreamExt;
+use quinn::{Endpoint, ServerConfig, NewConnection};
+
+
+fn generate_self_signed_cert() -> Result<(rustls::Certificate, rustls::PrivateKey), Box<dyn Error>>
+{
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])?;
+    let key = rustls::PrivateKey(cert.serialize_private_key_der());
+    Ok((rustls::Certificate(cert.serialize_der()?), key))
+}
+
+use std::{error::Error, fs::File, io::BufReader};
+
+pub fn read_certs_from_file(
+) -> Result<(Vec<rustls::Certificate>, rustls::PrivateKey), Box<dyn Error>> {
+    let mut cert_chain_reader = BufReader::new(File::open("./certificates.pem")?);
+    let certs = rustls_pemfile::certs(&mut cert_chain_reader)?
+        .into_iter()
+        .map(rustls::Certificate)
+        .collect();
+
+    let mut key_reader = BufReader::new(File::open("./privkey.pem")?);
+    // if the file starts with "BEGIN RSA PRIVATE KEY"
+    // let mut key_vec = rustls_pemfile::rsa_private_keys(&mut reader)?;
+    // if the file starts with "BEGIN PRIVATE KEY"
+    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut key_reader)?;
+
+    assert_eq!(keys.len(), 1);
+    let key = rustls::PrivateKey(keys.remove(0));
+
+    Ok((certs, key))
+}
+
+pub async fn setup() -> Result<(), Box<dyn Error>> {
+    let addr = "[::1]:0".parse()?;
+    let (cert, key) = generate_self_signed_cert()?;
+    let (endpoint, mut incoming) = Endpoint::server(ServerConfig::with_single_cert(vec![cert], key)?, addr)?;
+
+    while let Some(conn) = incoming.next().await {
+        let mut connection: NewConnection = conn.await?;
+
+        println!("connection");
+
+        // Save connection somewhere, start transferring, receiving data, see DataTransfer tutorial.
+    }
+
+    Ok(())
+}
 
 #[no_mangle]
 pub extern fn rust_greeting(to: *const c_char) -> *mut c_char {
