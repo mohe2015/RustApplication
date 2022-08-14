@@ -2,8 +2,8 @@ use std::net::Ipv6Addr;
 use std::os::raw::{c_char};
 use std::ffi::{CString, CStr};
 
-use futures_util::StreamExt;
-use quinn::{Endpoint, ServerConfig, NewConnection};
+use futures_util::{StreamExt, Future};
+use quinn::{Endpoint, ServerConfig, NewConnection, Incoming};
 
 
 fn generate_self_signed_cert() -> Result<(rustls::Certificate, rustls::PrivateKey), Box<dyn Error>>
@@ -35,11 +35,22 @@ pub fn read_certs_from_file(
     Ok((certs, key))
 }
 
-pub async fn setup() -> Result<(), Box<dyn Error>> {
+pub async fn setup<F, Fut>(f: F) -> Result<(), Box<dyn Error>> 
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = ()> {
     let addr = "[::1]:0".parse()?;
     let (cert, key) = generate_self_signed_cert()?;
     let (endpoint, mut incoming) = Endpoint::server(ServerConfig::with_single_cert(vec![cert], key)?, addr)?;
 
+    let (first, second) = tokio::join!(
+        f(),
+        handle_incoming(incoming));
+
+    Ok(())
+}
+
+pub async fn handle_incoming(mut incoming: Incoming) -> Result<(), Box<dyn Error>> {
     while let Some(conn) = incoming.next().await {
         let mut connection: NewConnection = conn.await?;
 
@@ -47,7 +58,6 @@ pub async fn setup() -> Result<(), Box<dyn Error>> {
 
         // Save connection somewhere, start transferring, receiving data, see DataTransfer tutorial.
     }
-
     Ok(())
 }
 
