@@ -45,13 +45,11 @@ where
 
     println!("{}", endpoint.local_addr()?);
 
-    let (first, second) = tokio::join!(
+    let res = tokio::try_join!(
         f(endpoint),
         handle_incoming(incoming));
 
-    first?;
-
-    second?;
+    res?;
 
     Ok(())
 }
