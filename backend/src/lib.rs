@@ -7,6 +7,7 @@ use futures_util::{StreamExt, Future};
 use quinn::{Endpoint, ServerConfig, NewConnection, Incoming};
 use rustls::RootCertStore;
 use rustls::server::{ResolvesServerCert, ResolvesServerCertUsingSni, AllowAnyAuthenticatedClient};
+use rustls::sign::CertifiedKey;
 
 
 fn generate_self_signed_cert() -> Result<(rustls::Certificate, rustls::PrivateKey), Box<dyn Error>>
@@ -48,11 +49,12 @@ impl rustls::client::ResolvesClientCert for MyResolvesClientCert {
         acceptable_issuers: &[&[u8]],
         sigschemes: &[rustls::SignatureScheme],
     ) -> Option<Arc<rustls::sign::CertifiedKey>> {
-        todo!()
+        let a = generate_self_signed_cert().unwrap();
+       Some(Arc::new(CertifiedKey::new(vec![a.0], rustls::sign::any_eddsa_type(&a.1).unwrap())))
     }
 
     fn has_certs(&self) -> bool {
-        todo!()
+        true
     }
 }
 
