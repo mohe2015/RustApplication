@@ -4,7 +4,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     backend::setup(|endpoint| async move {
         println!("executing");
 
-        let addr = "[::1]:48441".parse()?;
+        let addr = "[::1]:50907".parse()?;
 
         println!("jojo");
 
