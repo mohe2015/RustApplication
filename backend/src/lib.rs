@@ -1,9 +1,12 @@
 use std::net::Ipv6Addr;
 use std::os::raw::{c_char};
 use std::ffi::{CString, CStr};
+use std::sync::Arc;
 
 use futures_util::{StreamExt, Future};
 use quinn::{Endpoint, ServerConfig, NewConnection, Incoming};
+use rustls::RootCertStore;
+use rustls::server::{ResolvesServerCert, ResolvesServerCertUsingSni, AllowAnyAuthenticatedClient};
 
 
 fn generate_self_signed_cert() -> Result<(rustls::Certificate, rustls::PrivateKey), Box<dyn Error>>
@@ -35,13 +38,42 @@ pub fn read_certs_from_file(
     Ok((certs, key))
 }
 
+pub struct MyResolvesClientCert {
+
+}
+
+impl rustls::client::ResolvesClientCert for MyResolvesClientCert {
+    fn resolve(
+        &self,
+        acceptable_issuers: &[&[u8]],
+        sigschemes: &[rustls::SignatureScheme],
+    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
+        todo!()
+    }
+
+    fn has_certs(&self) -> bool {
+        todo!()
+    }
+}
+
 pub async fn setup<F, Fut>(f: F) -> Result<(), Box<dyn Error>> 
 where
     F: FnOnce(Endpoint) -> Fut,
     Fut: Future<Output = Result<(), Box<dyn Error>>> {
     let addr = "[::1]:0".parse()?;
     let (cert, key) = generate_self_signed_cert()?;
-    let (endpoint, mut incoming) = Endpoint::server(ServerConfig::with_single_cert(vec![cert], key)?, addr)?;
+
+    let client_root_store = RootCertStore::empty();
+    let server_root_store = RootCertStore::empty();
+
+    // vec![cert], key)?
+    
+    // with_client_cert_verifier would need to be per SNI
+    let server_config = rustls::server::ServerConfig::builder().with_safe_defaults().with_client_cert_verifier(AllowAnyAuthenticatedClient::new(server_root_store)).with_cert_resolver(Arc::new(ResolvesServerCertUsingSni::new()));
+    let client_config = rustls::client::ClientConfig::builder().with_safe_defaults().with_root_certificates(client_root_store).with_client_cert_resolver(Arc::new(MyResolvesClientCert{}));
+
+    let (mut endpoint, mut incoming) = Endpoint::server(ServerConfig::with_crypto(Arc::new(server_config)), addr)?;
+    endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(client_config)));
 
     println!("{}", endpoint.local_addr()?);
 
