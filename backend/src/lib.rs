@@ -15,10 +15,11 @@ use std::{error::Error, fs::File, io::BufReader};
 
 /*
 openssl genpkey -algorithm ed25519 -out server-key.pem
-openssl pkey -in server-key.pem -pubout -out server-cert.pem
+openssl req -addext basicConstraints=critical,CA:FALSE -nodes -x509 -key server-key.pem -out server-cert.pem -sha256 -batch -days 3650 -subj "/CN=fakecn"
 
 openssl genpkey -algorithm ed25519 -out client-key.pem
-openssl pkey -in client-key.pem -pubout -out client-cert.pem
+openssl req -addext basicConstraints=critical,CA:FALSE -nodes -x509 -key client-key.pem -out client-cert.pem -sha256 -batch -days 3650 -subj "/CN=fakecn"
+
 */
 pub fn read_certs_from_file(basename: &str
 ) -> Result<(Vec<rustls::Certificate>, rustls::PrivateKey), Box<dyn Error>> {
