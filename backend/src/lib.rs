@@ -10,27 +10,23 @@ use rustls::server::{ResolvesServerCert, ResolvesServerCertUsingSni, AllowAnyAut
 use rustls::sign::CertifiedKey;
 
 
-fn generate_self_signed_cert() -> Result<(rustls::Certificate, rustls::PrivateKey), Box<dyn Error>>
-{
-    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])?;
-    let key = rustls::PrivateKey(cert.serialize_private_key_der());
-    Ok((rustls::Certificate(cert.serialize_der()?), key))
-}
-
 use std::{error::Error, fs::File, io::BufReader};
 
-pub fn read_certs_from_file(
+
+/*
+openssl genpkey -algorithm ed25519 -out server-key.pem
+openssl pkey -in server-key.pem -pubout -out server-cert.pem
+*/
+pub fn read_certs_from_file(basename: &str
 ) -> Result<(Vec<rustls::Certificate>, rustls::PrivateKey), Box<dyn Error>> {
-    let mut cert_chain_reader = BufReader::new(File::open("./certificates.pem")?);
+    let mut cert_chain_reader = BufReader::new(File::open(format!("{basename}-cert.pem"))?);
     let certs = rustls_pemfile::certs(&mut cert_chain_reader)?
         .into_iter()
         .map(rustls::Certificate)
         .collect();
 
-    let mut key_reader = BufReader::new(File::open("./privkey.pem")?);
-    // if the file starts with "BEGIN RSA PRIVATE KEY"
-    // let mut key_vec = rustls_pemfile::rsa_private_keys(&mut reader)?;
-    // if the file starts with "BEGIN PRIVATE KEY"
+    let mut key_reader = BufReader::new(File::open(format!("{basename}-key.pem"))?);
+  
     let mut keys = rustls_pemfile::pkcs8_private_keys(&mut key_reader)?;
 
     assert_eq!(keys.len(), 1);
@@ -39,9 +35,7 @@ pub fn read_certs_from_file(
     Ok((certs, key))
 }
 
-pub struct MyResolvesClientCert {
-
-}
+pub struct MyResolvesClientCert(Option<Arc<rustls::sign::CertifiedKey>>);
 
 impl rustls::client::ResolvesClientCert for MyResolvesClientCert {
     fn resolve(
@@ -49,8 +43,7 @@ impl rustls::client::ResolvesClientCert for MyResolvesClientCert {
         acceptable_issuers: &[&[u8]],
         sigschemes: &[rustls::SignatureScheme],
     ) -> Option<Arc<rustls::sign::CertifiedKey>> {
-        let a = generate_self_signed_cert().unwrap();
-       Some(Arc::new(CertifiedKey::new(vec![a.0], rustls::sign::any_eddsa_type(&a.1).unwrap())))
+        self.0
     }
 
     fn has_certs(&self) -> bool {
@@ -58,21 +51,21 @@ impl rustls::client::ResolvesClientCert for MyResolvesClientCert {
     }
 }
 
-pub async fn setup<F, Fut>(f: F) -> Result<(), Box<dyn Error>> 
+pub async fn setup<F, Fut>(basename: &str, f: F) -> Result<(), Box<dyn Error>> 
 where
     F: FnOnce(Endpoint) -> Fut,
     Fut: Future<Output = Result<(), Box<dyn Error>>> {
     let addr = "[::1]:0".parse()?;
-    let (cert, key) = generate_self_signed_cert()?;
+    let (cert, key) = read_certs_from_file(basename)?;
 
     let client_root_store = RootCertStore::empty();
     let server_root_store = RootCertStore::empty();
-
-    // vec![cert], key)?
     
-    // with_client_cert_verifier would need to be per SNI
-    let server_config = rustls::server::ServerConfig::builder().with_safe_defaults().with_client_cert_verifier(AllowAnyAuthenticatedClient::new(server_root_store)).with_cert_resolver(Arc::new(ResolvesServerCertUsingSni::new()));
-    let client_config = rustls::client::ClientConfig::builder().with_safe_defaults().with_root_certificates(client_root_store).with_client_cert_resolver(Arc::new(MyResolvesClientCert{}));
+    let server_key = CertifiedKey::new(cert.clone(), rustls::sign::any_eddsa_type(&key).unwrap());
+
+    let server_config = rustls::server::ServerConfig::builder().with_safe_defaults().with_client_cert_verifier(AllowAnyAuthenticatedClient::new(server_root_store)).with_single_cert(cert, key)?;   
+
+    let client_config = rustls::client::ClientConfig::builder().with_safe_defaults().with_root_certificates(client_root_store).with_client_cert_resolver(Arc::new(MyResolvesClientCert(Some(Arc::new(server_key)))));
 
     let (mut endpoint, mut incoming) = Endpoint::server(ServerConfig::with_crypto(Arc::new(server_config)), addr)?;
     endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(client_config)));
