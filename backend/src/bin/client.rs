@@ -1,7 +1,7 @@
 
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    backend::setup(|endpoint| async move {
+    backend::setup("client", |endpoint| async move {
         println!("executing");
 
         let addr = "[::1]:50907".parse()?;

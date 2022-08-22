@@ -35,7 +35,7 @@ pub fn read_certs_from_file(basename: &str
     Ok((certs, key))
 }
 
-pub struct MyResolvesClientCert(Option<Arc<rustls::sign::CertifiedKey>>);
+pub struct MyResolvesClientCert(Arc<rustls::sign::CertifiedKey>);
 
 impl rustls::client::ResolvesClientCert for MyResolvesClientCert {
     fn resolve(
@@ -43,7 +43,7 @@ impl rustls::client::ResolvesClientCert for MyResolvesClientCert {
         acceptable_issuers: &[&[u8]],
         sigschemes: &[rustls::SignatureScheme],
     ) -> Option<Arc<rustls::sign::CertifiedKey>> {
-        self.0
+        Some(self.0.clone())
     }
 
     fn has_certs(&self) -> bool {
@@ -65,7 +65,7 @@ where
 
     let server_config = rustls::server::ServerConfig::builder().with_safe_defaults().with_client_cert_verifier(AllowAnyAuthenticatedClient::new(server_root_store)).with_single_cert(cert, key)?;   
 
-    let client_config = rustls::client::ClientConfig::builder().with_safe_defaults().with_root_certificates(client_root_store).with_client_cert_resolver(Arc::new(MyResolvesClientCert(Some(Arc::new(server_key)))));
+    let client_config = rustls::client::ClientConfig::builder().with_safe_defaults().with_root_certificates(client_root_store).with_client_cert_resolver(Arc::new(MyResolvesClientCert(Arc::new(server_key))));
 
     let (mut endpoint, mut incoming) = Endpoint::server(ServerConfig::with_crypto(Arc::new(server_config)), addr)?;
     endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(client_config)));
