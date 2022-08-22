@@ -15,10 +15,10 @@ use std::{error::Error, fs::File, io::BufReader};
 
 /*
 openssl genpkey -algorithm ed25519 -out server-key.pem
-openssl req -addext basicConstraints=critical,CA:FALSE -nodes -x509 -key server-key.pem -out server-cert.pem -sha256 -batch -days 3650 -subj "/CN=fakecn"
+openssl req -addext basicConstraints=critical,CA:FALSE -nodes -x509 -key server-key.pem -out server-cert.pem -sha256 -batch -days 3650 -subj "/CN=localhost"
 
 openssl genpkey -algorithm ed25519 -out client-key.pem
-openssl req -addext basicConstraints=critical,CA:FALSE -nodes -x509 -key client-key.pem -out client-cert.pem -sha256 -batch -days 3650 -subj "/CN=fakecn"
+openssl req -addext basicConstraints=critical,CA:FALSE -nodes -x509 -key client-key.pem -out client-cert.pem -sha256 -batch -days 3650 -subj "/CN=localhost"
 
 */
 pub fn read_certs_from_file(basename: &str
@@ -59,7 +59,11 @@ pub async fn setup<F, Fut>(basename: &str, f: F) -> Result<(), Box<dyn Error>>
 where
     F: FnOnce(Endpoint) -> Fut,
     Fut: Future<Output = Result<(), Box<dyn Error>>> {
-    let addr = "[::1]:0".parse()?;
+
+    let addr = if basename == "client" { "[::1]:59881" } else { "[::1]:59882" }.parse()?;
+    //let addr = "[::1]:0".parse()?;
+
+
     let (cert, key) = read_certs_from_file(basename)?;
 
     let (node1_cert, _) = read_certs_from_file("client")?;
