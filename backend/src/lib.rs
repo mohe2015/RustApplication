@@ -16,6 +16,9 @@ use std::{error::Error, fs::File, io::BufReader};
 /*
 openssl genpkey -algorithm ed25519 -out server-key.pem
 openssl pkey -in server-key.pem -pubout -out server-cert.pem
+
+openssl genpkey -algorithm ed25519 -out client-key.pem
+openssl pkey -in client-key.pem -pubout -out client-cert.pem
 */
 pub fn read_certs_from_file(basename: &str
 ) -> Result<(Vec<rustls::Certificate>, rustls::PrivateKey), Box<dyn Error>> {
@@ -58,8 +61,16 @@ where
     let addr = "[::1]:0".parse()?;
     let (cert, key) = read_certs_from_file(basename)?;
 
-    let client_root_store = RootCertStore::empty();
-    let server_root_store = RootCertStore::empty();
+    let (node1_cert, _) = read_certs_from_file("client")?;
+    let (node2_cert, _) = read_certs_from_file("server")?;
+
+    let mut client_root_store = RootCertStore::empty();
+    client_root_store.add(&node1_cert[0])?;
+    client_root_store.add(&node2_cert[0])?;
+
+    let mut server_root_store = RootCertStore::empty();
+    server_root_store.add(&node1_cert[0])?;
+    server_root_store.add(&node2_cert[0])?;
     
     let server_key = CertifiedKey::new(cert.clone(), rustls::sign::any_eddsa_type(&key).unwrap());
 
